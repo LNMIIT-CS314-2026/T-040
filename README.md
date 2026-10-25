@@ -1,7 +1,5 @@
 # T040 Student Discipline Management System
 
-Initial foundation for the four-role MVP described in `info/T040_Codex_Project_Implementation_Brief.pdf`. The project uses React, Express, and MongoDB as specified for this implementation. The source PDFs define the domain and component responsibilities; they do not mandate this technology stack.
-
 ## Requirements
 
 - Node.js 20 or newer and npm
@@ -71,5 +69,3 @@ Next: continue with the next use case in the source brief.
 - `npm run build` — production React bundle.
 
 The integration test is skipped unless `TEST_MONGODB_URI` points to a dedicated MongoDB test database whose name contains `test`. In PowerShell, set it before running `npm run test:integration`, for example: `$env:TEST_MONGODB_URI = 'mongodb://127.0.0.1:27017/t040_discipline_test'`. The test creates and removes fictional test-only records.
-
-Writes that span multiple collections are performed in sequence with best-effort cleanup if incident submission or case creation fails. Standalone MongoDB cannot make those writes fully atomic, so a process or database failure between writes can leave related records out of sync. Do not use real student records in development. The PDFs do not define a retention schedule, legal policy, or a required age/date-of-birth field; those remain institutional policy decisions.
