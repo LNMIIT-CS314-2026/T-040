@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api/client.js';
 import './hearings.css';
+import './hearing-reschedule.css';
 import './case-actions.css';
 
 function DecisionForm({ onSubmit, busy }) {
@@ -51,6 +52,8 @@ export default function HearingWorkspace() {
   const [scheduledAt, setScheduledAt] = useState(localDateTime());
   const [location, setLocation] = useState('');
   const [proceedings, setProceedings] = useState({});
+  const [reschedulingId, setReschedulingId] = useState('');
+  const [rescheduleForm, setRescheduleForm] = useState({ scheduledAt: '', location: '' });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -84,6 +87,21 @@ export default function HearingWorkspace() {
     finally { setBusy(false); }
   }
 
+  function beginReschedule(hearing) {
+    setReschedulingId(hearing._id);
+    setRescheduleForm({ scheduledAt: localDateTime(new Date(hearing.scheduledAt)), location: hearing.location });
+    setError(''); setNotice('');
+  }
+
+  async function reschedule(event, hearingId) {
+    event.preventDefault(); setBusy(true); setError(''); setNotice('');
+    try {
+      await api(`/cases/hearings/${hearingId}/reschedule`, { method: 'PATCH', body: JSON.stringify({ scheduledAt: new Date(rescheduleForm.scheduledAt).toISOString(), location: rescheduleForm.location }) });
+      setReschedulingId(''); setNotice('Hearing rescheduled.'); await refresh();
+    } catch (requestError) { setError(requestError.message); }
+    finally { setBusy(false); }
+  }
+
   async function recordDecision(id, decision) {
     setBusy(true); setError(''); setNotice('');
     try {
@@ -112,7 +130,17 @@ export default function HearingWorkspace() {
       {item.hearings.length ? <div className="hearing-list">{item.hearings.map((hearing) => <div className="hearing-entry" key={hearing._id}>
         <div className="hearing-entry-heading"><strong>{new Date(hearing.scheduledAt).toLocaleString()}</strong><span className="incident-status">{hearing.status}</span></div>
         <p className="muted">{hearing.location}</p>
-        {hearing.status === 'scheduled' ? <><label>Proceedings<textarea rows="3" maxLength="5000" placeholder="Record the hearing outcome and proceedings after it takes place." value={proceedings[hearing._id] || ''} onChange={(event) => setProceedings((current) => ({ ...current, [hearing._id]: event.target.value }))} /></label><button className="primary-action" disabled={busy || !(proceedings[hearing._id] || '').trim()} onClick={() => complete(hearing._id)}>Complete hearing and save proceedings</button></> : <div className="hearing-minutes"><strong>Proceedings</strong><p>{hearing.proceedings}</p></div>}
+        {hearing.status === 'scheduled' ? <>
+          <button type="button" className="text-action reschedule-trigger" onClick={() => reschedulingId === hearing._id ? setReschedulingId('') : beginReschedule(hearing)}>{reschedulingId === hearing._id ? 'Cancel reschedule' : 'Reschedule hearing'}</button>
+          {reschedulingId === hearing._id ? <form className="hearing-reschedule-form" onSubmit={(event) => reschedule(event, hearing._id)}>
+            <label>New date and time<input type="datetime-local" min={localDateTime(new Date())} max={hearingMax} value={rescheduleForm.scheduledAt} onChange={(event) => setRescheduleForm((current) => ({ ...current, scheduledAt: event.target.value }))} required /></label>
+            <label>Location<input value={rescheduleForm.location} onChange={(event) => setRescheduleForm((current) => ({ ...current, location: event.target.value }))} maxLength="200" required /></label>
+            <button className="primary-action" disabled={busy}>{busy ? 'Saving...' : 'Save new schedule'}</button>
+          </form> : <>
+            <label>Proceedings<textarea rows="3" maxLength="5000" placeholder="Record the hearing outcome and proceedings after it takes place." value={proceedings[hearing._id] || ''} onChange={(event) => setProceedings((current) => ({ ...current, [hearing._id]: event.target.value }))} /></label>
+            <button className="primary-action" disabled={busy || !(proceedings[hearing._id] || '').trim()} onClick={() => complete(hearing._id)}>Complete hearing and save proceedings</button>
+          </>}
+        </> : <div className="hearing-minutes"><strong>Proceedings</strong><p>{hearing.proceedings}</p></div>}
       </div>)}</div> : <p className="muted">No hearings scheduled for this case.</p>}
       {item.decision ? <div className="decision-summary"><p className="eyebrow">DECISION · {item.decision.finding.replace('_', ' ')}</p><p>{item.decision.rationale}</p></div> : item.currentStatus === 'open' && item.hearings.some((hearing) => hearing.status === 'completed')
         ? <DecisionForm busy={busy} onSubmit={(payload) => recordDecision(item._id, payload)} />

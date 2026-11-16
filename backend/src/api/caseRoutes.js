@@ -120,6 +120,29 @@ caseRoutes.post('/:caseId/hearings', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+caseRoutes.patch('/hearings/:hearingId/reschedule', async (req, res, next) => {
+  const { scheduledAt, location } = req.body || {};
+  const date = new Date(scheduledAt);
+  const now = new Date();
+  if (!mongoose.isValidObjectId(req.params.hearingId) || !scheduledAt || Number.isNaN(date.getTime())
+      || date <= now || date > shiftCalendarMonth(now, 1)
+      || (location !== undefined && (typeof location !== 'string' || !location.trim() || location.trim().length > 200))) {
+    return res.status(400).json({ error: 'Choose a new hearing date within the next month and provide a valid location if changing it.' });
+  }
+  try {
+    const hearing = await Hearing.findById(req.params.hearingId);
+    if (!hearing) return res.status(404).json({ error: 'Hearing not found.' });
+    if (hearing.status !== 'scheduled') return res.status(409).json({ error: 'Only a scheduled hearing can be rescheduled.' });
+    hearing.scheduledAt = date;
+    if (location !== undefined) hearing.location = location.trim();
+    await hearing.save();
+    const disciplinaryCase = await DisciplinaryCase.findById(hearing.caseId, 'incidentId');
+    await CaseHistory.create([{ caseId: hearing.caseId, incidentId: disciplinaryCase.incidentId, actorId: req.user.id, eventType: 'hearing.rescheduled' }]);
+    await appendAudit({ actorId: req.user.id, action: 'hearing.rescheduled', entityType: 'Hearing', entityId: String(hearing._id) });
+    return res.json({ hearing });
+  } catch (error) { return next(error); }
+});
+
 caseRoutes.patch('/hearings/:hearingId/complete', async (req, res, next) => {
   const proceedings = req.body?.proceedings;
   if (!mongoose.isValidObjectId(req.params.hearingId) || typeof proceedings !== 'string' || !proceedings.trim() || proceedings.trim().length > 5000) {
